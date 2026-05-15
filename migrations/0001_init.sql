@@ -1,0 +1,2 @@
+-- @connectingmatrix/logger package-owned migrations.
+-- Package-specific migrations are appended by each module.
