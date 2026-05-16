@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { LocalEventBus, makeId, nowIso, type PackageHealth, type PackageModule, type RequestContext } from './contracts.js';
 import { PackageObservability, type RuntimeLogLevel, type RuntimeLogEvent, type RuntimeProcessSnapshot, type RuntimeSocketLike, type RuntimeProcessStatus } from './observability.js';
-import { createStubLauncher } from './launcher.js';
+import { createPackageStatusPanel } from './services/package-status.service.js';
 
 export type LogLevel = RuntimeLogLevel;
 export interface LoggerSetup {
@@ -376,7 +376,7 @@ export const createPackage = (): PackageModule => ({
   health: () => Logger.health(),
   graphql,
   migrations: graphql.migrations,
-  launcher: createStubLauncher,
+  launcher: createPackageStatusPanel,
   runtime: { Logger, ProcessMonitor, processMonitoring, observability: PackageObservability },
   routes: [
     { method: 'GET', path: '/logger/health', handler: () => Logger.health() },
@@ -392,11 +392,11 @@ export const createPackage = (): PackageModule => ({
     { method: 'POST', path: '/process-monitor/kill', handler: (request) => processMonitoring.kill(String(requestBody(request).processId ?? ''), String(requestBody(request).reason ?? 'killed by user'), (request as { context?: RequestContext }).context ?? {}) },
     { method: 'POST', path: '/process-monitoring/kill', handler: (request) => processMonitoring.kill(String(requestBody(request).processId ?? ''), String(requestBody(request).reason ?? 'killed by user'), (request as { context?: RequestContext }).context ?? {}) },
     { method: 'POST', path: '/process-monitor/heartbeat', handler: (request) => processMonitoring.heartbeat(String(requestBody(request).processId ?? ''), requestBody(request) as { status?: 'ok' | 'error' | 'stale'; message?: string }, (request as { context?: RequestContext }).context ?? {}) },
-    { method: 'GET', path: '/logger/launcher', handler: (request) => createStubLauncher((request as { context?: RequestContext }).context ?? {}) },
+    { method: 'GET', path: '/logger/launcher', handler: (request) => createPackageStatusPanel((request as { context?: RequestContext }).context ?? {}) },
   ],
 });
 
 export * from './contracts.js';
 export * from './package-structure.js';
 export * from './observability.js';
-export * from './launcher.js';
+export * from './services/package-status.service.js';

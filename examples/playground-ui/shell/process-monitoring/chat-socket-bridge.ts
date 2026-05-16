@@ -1,5 +1,5 @@
-import { CHAT_SOCKET_EVENT_TYPES, type ChatSocketEventType } from '@/socket/chat/page-events.socket';
-import type { ChatExecutionMode } from '@/socket/chat/types.socket';
+import { CHAT_SOCKET_EVENT_TYPES, type ChatSocketEventType } from '@giga/dataloader/client/legacy/socket/chat/page-events.socket';
+import type { ChatExecutionMode } from '@giga/dataloader/client/legacy/socket/chat/types.socket';
 import { processMonitorRealtime } from './realtimeProcessStore';
 
 type RuntimeMode = ChatExecutionMode | 'DEFAULT';

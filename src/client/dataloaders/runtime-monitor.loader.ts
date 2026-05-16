@@ -1,10 +1,10 @@
-import { readStoredTokens } from '@/graphql/helper';
-import { readRuntimeMonitor as readRuntimeMonitorOperation } from '@/orm/runtime-monitor';
-import { RuntimeMonitorSocketClient } from '@/socket/runtime/RuntimeMonitorSocketClient';
-import type { RuntimeEventPayload, RuntimeMonitorPayload, RuntimeSubscribeInput } from '@/socket/runtime/types.socket';
-import type { EntityRecord, RuntimeLog, RuntimeMonitorState, RuntimeProcess, ScopeRef } from '@/orm';
-import type { UiDataContext } from '@/dataloaders/context';
-import type { UiPermissionSnapshot } from '@/dataloaders/permissions-ui.loader';
+import { readStoredTokens } from '@giga/dataloader/client/legacy/graphql/helper';
+import { readRuntimeMonitor as readRuntimeMonitorOperation } from '@giga/dataloader/client/legacy/orm/runtime-monitor';
+import { RuntimeMonitorSocketClient } from '@giga/dataloader/client/legacy/socket/runtime/RuntimeMonitorSocketClient';
+import type { RuntimeEventPayload, RuntimeMonitorPayload, RuntimeSubscribeInput } from '@giga/dataloader/client/legacy/socket/runtime/types.socket';
+import type { EntityRecord, RuntimeLog, RuntimeMonitorState, RuntimeProcess, ScopeRef } from '@giga/dataloader/client/legacy/orm';
+import type { UiDataContext } from '@giga/dataloader/client/legacy/dataloaders/context';
+import type { UiPermissionSnapshot } from '@giga/dataloader/client/legacy/dataloaders/permissions-ui.loader';
 
 export type RuntimeMonitorKind = 'processes' | 'workflows' | 'agents' | 'swarms' | 'applications';
 export type { RuntimeEventPayload };
