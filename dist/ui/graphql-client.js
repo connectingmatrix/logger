@@ -15,6 +15,9 @@ export class GraphQLClient {
         this.headers = { ...this.headers, ...headers };
         return this;
     }
+    async mutation(operation, variables = {}, context) {
+        return this.query(operation, variables, context);
+    }
     async query(operation, variables = {}, context) {
         const fetcher = this.fetchImpl ?? globalThis.fetch;
         if (!fetcher)

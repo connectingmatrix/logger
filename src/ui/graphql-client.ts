@@ -27,6 +27,10 @@ export class GraphQLClient {
     return this;
   }
 
+  async mutation<T>(operation: string, variables: Record<string, unknown> = {}, context?: RequestContext): Promise<T> {
+    return this.query<T>(operation, variables, context);
+  }
+
   async query<T>(operation: string, variables: Record<string, unknown> = {}, context?: RequestContext): Promise<T> {
     const fetcher = this.fetchImpl ?? globalThis.fetch;
     if (!fetcher) throw new Error('No fetch implementation is available for GraphQLClient');

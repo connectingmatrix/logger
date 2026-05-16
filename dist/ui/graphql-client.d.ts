@@ -11,5 +11,6 @@ export declare class GraphQLClient {
     constructor(options?: GraphQLClientOptions);
     bindWithServer(endpoint: string): this;
     setHeaders(headers: Record<string, string>): this;
+    mutation<T>(operation: string, variables?: Record<string, unknown>, context?: RequestContext): Promise<T>;
     query<T>(operation: string, variables?: Record<string, unknown>, context?: RequestContext): Promise<T>;
 }
