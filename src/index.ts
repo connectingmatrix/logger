@@ -74,70 +74,6 @@ function normalizeProcessStatus(status?: RuntimeProcessStatus | string): Runtime
   return 'running';
 }
 
-
-export type RuntimeExternalEventKind = 'workflow' | 'ai-agent' | 'swarm' | 'project' | 'node' | 'system';
-export interface RuntimeExternalEvent {
-  source?: string;
-  type?: 'queued' | 'started' | 'running' | 'heartbeat' | 'log' | 'completed' | 'failed' | 'aborted' | string;
-  processId?: string;
-  executionId?: string;
-  runId?: string;
-  workflowId?: string;
-  projectId?: string;
-  agentId?: string;
-  swarmId?: string;
-  nodeId?: string;
-  packageName?: string;
-  kind?: RuntimeExternalEventKind | string;
-  title?: string;
-  status?: string;
-  progress?: number;
-  log?: string | { level?: RuntimeLogLevel | string; message?: string; data?: unknown };
-  message?: string;
-  errorMessage?: string;
-  metadata?: Record<string, unknown>;
-  payload?: unknown;
-}
-export interface RuntimeStatusSource {
-  name: string;
-  kind?: RuntimeExternalEventKind | string;
-  start?: (handler: (event: RuntimeExternalEvent) => void | Promise<void>) => void | Promise<void>;
-  stop?: () => void | Promise<void>;
-  list?: () => RuntimeExternalEvent[] | Promise<RuntimeExternalEvent[]>;
-  abort?: (processId: string, reason?: string) => unknown | Promise<unknown>;
-  logs?: (processId: string) => RuntimeExternalEvent[] | Promise<RuntimeExternalEvent[]>;
-}
-function runtimeEventProcessId(event: RuntimeExternalEvent): string {
-  return event.processId ?? event.runId ?? event.executionId ?? event.workflowId ?? event.projectId ?? event.agentId ?? event.swarmId ?? event.nodeId ?? makeId('runtime');
-}
-function runtimeEventKind(event: RuntimeExternalEvent): string {
-  const raw = String(event.kind ?? event.source ?? event.packageName ?? '').toLowerCase();
-  if (event.workflowId || raw.includes('workflow')) return 'Workflows';
-  if (event.projectId || raw.includes('project')) return 'Projects';
-  if (event.swarmId || raw.includes('swarm')) return 'Swarm';
-  if (event.nodeId || raw.includes('node')) return 'Nodes';
-  if (event.agentId || raw.includes('agent')) return 'Ai Agents';
-  return 'Other';
-}
-function runtimeEventPackage(event: RuntimeExternalEvent): string {
-  if (event.packageName) return event.packageName;
-  const kind = runtimeEventKind(event);
-  if (kind === 'Workflows') return '@connectingmatrix/workflows';
-  if (kind === 'Projects') return '@connectingmatrix/projects';
-  if (kind === 'Swarm') return '@connectingmatrix/agent-swarm';
-  if (kind === 'Nodes') return '@connectingmatrix/nodes';
-  if (kind === 'Ai Agents') return '@connectingmatrix/ai-agents';
-  return '@connectingmatrix/logger';
-}
-function runtimeEventStatus(event: RuntimeExternalEvent): RuntimeProcessStatus {
-  const raw = String(event.status ?? event.type ?? '').toLowerCase();
-  if (raw === 'queued') return 'queued';
-  if (raw === 'started' || raw === 'running' || raw === 'heartbeat' || raw === 'log') return 'running';
-  if (raw === 'completed' || raw === 'success' || raw === 'done' || raw === 'passed' || raw === 'deployed') return 'completed';
-  if (raw === 'failed' || raw === 'error' || raw === 'errored') return 'failed';
-  if (raw === 'aborted' || raw === 'cancelled' || raw === 'canceled') return 'aborted';
-  return 'running';
-}
 class ProcessMonitoringRuntime {
   private sockets?: RuntimeSocketLike;
   private readonly bus = new LocalEventBus();
@@ -292,82 +228,7 @@ class ProcessMonitoringRuntime {
     return this.track(processId, { ...(input.patch ?? {}), heartbeat: { status: input.status ?? 'ok', message: input.message, at: nowIso() } }, context);
   }
 
-
-  private readonly sources = new Map<string, RuntimeStatusSource>();
-  private readonly sourceStops = new Map<string, () => void | Promise<void>>();
-
-  bindRuntimeSource(source: RuntimeStatusSource, options: { autoStart?: boolean } = { autoStart: true }): this {
-    this.sources.set(source.name, source);
-    if (options.autoStart !== false) void this.startRuntimeSource(source.name);
-    return this;
-  }
-
-  async startRuntimeSource(name: string): Promise<void> {
-    const source = this.sources.get(name);
-    if (!source || this.sourceStops.has(name)) return;
-    if (source.start) {
-      await source.start((event) => { this.applyRuntimeEvent({ ...event, source: event.source ?? source.name, kind: event.kind ?? source.kind }); });
-      if (source.stop) this.sourceStops.set(name, () => source.stop?.());
-    }
-    const listed = await source.list?.();
-    for (const event of listed ?? []) this.applyRuntimeEvent({ ...event, source: event.source ?? source.name, kind: event.kind ?? source.kind });
-  }
-
-  async stopRuntimeSource(name: string): Promise<void> {
-    const stop = this.sourceStops.get(name);
-    if (stop) await stop();
-    this.sourceStops.delete(name);
-  }
-
-  runtimeSources(): Array<{ name: string; kind?: string; live: boolean }> {
-    return [...this.sources.values()].map((source) => ({ name: source.name, kind: source.kind, live: this.sourceStops.has(source.name) }));
-  }
-
-  applyRuntimeEvent(event: RuntimeExternalEvent, context: RequestContext = {}): MonitoredProcess {
-    const processId = runtimeEventProcessId(event);
-    const status = runtimeEventStatus(event);
-    const row = this.track(processId, {
-      packageName: runtimeEventPackage(event),
-      kind: runtimeEventKind(event),
-      label: event.title ?? event.message ?? `${runtimeEventKind(event)} ${processId}`,
-      status,
-      progress: event.progress ?? (status === 'queued' ? 0 : status === 'running' ? 50 : 100),
-      context: { ...(event.metadata ?? {}), source: event.source, workflowId: event.workflowId, executionId: event.executionId, runId: event.runId, projectId: event.projectId, agentId: event.agentId, swarmId: event.swarmId, nodeId: event.nodeId },
-      abortable: true,
-    }, context);
-    if (event.type === 'log' || event.log || event.message || event.errorMessage) {
-      const log = typeof event.log === 'object' && event.log ? event.log : undefined;
-      const level = (log?.level === 'error' || status === 'failed') ? 'error' : (log?.level === 'warn' ? 'warn' : 'info');
-      const message = log?.message ?? (typeof event.log === 'string' ? event.log : undefined) ?? event.errorMessage ?? event.message ?? String(event.type ?? status);
-      this.appendLog(processId, level as RuntimeLogLevel, message, { event }, context);
-    }
-    return row;
-  }
-
-  queueStatus(filter: { kind?: string; workflowId?: string; projectId?: string; agentId?: string; swarmId?: string; nodeId?: string } = {}): MonitoredProcess[] {
-    return this.list(filter.kind ? { kind: filter.kind } : {}).filter((row) => {
-      const ctx = row.context as Record<string, unknown> | undefined;
-      return (!filter.workflowId || ctx?.workflowId === filter.workflowId) && (!filter.projectId || ctx?.projectId === filter.projectId) && (!filter.agentId || ctx?.agentId === filter.agentId) && (!filter.swarmId || ctx?.swarmId === filter.swarmId) && (!filter.nodeId || ctx?.nodeId === filter.nodeId);
-    });
-  }
-
-  bindWorkflowExecutorPubsub(executor: { consumeWorkflowExecutionEvents?: (options: { applyExecutionEvent: (event: RuntimeExternalEvent) => void | Promise<void>; config?: unknown; handleExecutionEventError?: (params: { error: unknown; event: unknown }) => void | Promise<void> }) => { start: () => Promise<void>; stop: (params?: { force?: boolean }) => Promise<void> }; cancelRun?: (runId: string) => unknown; cancelWorkflow?: (workflowId: string) => unknown; getRunning?: (workflowId?: string | null) => unknown[] }, config?: unknown): this {
-    const source: RuntimeStatusSource = {
-      name: 'giga-wf-executor:workflow-execution-events',
-      kind: 'workflow',
-      start: async (handler) => {
-        if (!executor.consumeWorkflowExecutionEvents) return;
-        const consumer = executor.consumeWorkflowExecutionEvents({ applyExecutionEvent: handler, config, handleExecutionEventError: ({ error, event }) => { this.appendLog(runtimeEventProcessId(event as RuntimeExternalEvent), 'error', error instanceof Error ? error.message : String(error), { event }); } });
-        await consumer.start();
-        this.sourceStops.set(source.name, () => consumer.stop({ force: true }));
-      },
-      list: async () => (executor.getRunning?.() ?? []).map((row) => ({ ...(row as Record<string, unknown>), type: 'running', source: 'giga-wf-executor:running' })) as RuntimeExternalEvent[],
-      abort: (processId, reason) => executor.cancelRun?.(processId) ?? executor.cancelWorkflow?.(processId) ?? this.appendLog(processId, 'warn', `Executor abort requested: ${reason ?? 'abort'}`),
-    };
-    return this.bindRuntimeSource(source, { autoStart: false });
-  }
-
-  health(): PackageHealth { return { name: '@connectingmatrix/logger/process-monitor', status: 'ok', checkedAt: nowIso(), details: { processes: this.rows.size, logs: this.globalLogs.length, socketsBound: Boolean(this.sockets), runtimeSources: this.runtimeSources() } }; }
+  health(): PackageHealth { return { name: '@connectingmatrix/logger/process-monitor', status: 'ok', checkedAt: nowIso(), details: { processes: this.rows.size, logs: this.globalLogs.length, socketsBound: Boolean(this.sockets) } }; }
 }
 
 class LoggerRuntime {
@@ -489,15 +350,12 @@ export const Log = LogDecorator;
 
 export const graphql = {
   namespace: 'logger',
-  typeDefs: `type PackageHealthStatus { name: String!, status: String!, checkedAt: String! } type Query { loggerHealth: String!, processMonitorSnapshot: String!, processMonitoringList(kind: String, status: String, packageName: String): String!, processMonitoringLive(kind: String): String!, processMonitoringQueueStatus(kind: String, workflowId: ID, projectId: ID, agentId: ID, swarmId: ID, nodeId: ID): String!, processMonitoringLogs(processId: ID!): String!, processMonitoringSources: String! } type Mutation { processMonitoringAbort(processId: ID!, reason: String): String!, processMonitoringKill(processId: ID!, reason: String): String! }`,
+  typeDefs: `type PackageHealthStatus { name: String!, status: String!, checkedAt: String! } type Query { loggerHealth: String!, processMonitorSnapshot: String!, processMonitoringList(kind: String, status: String, packageName: String): String!, processMonitoringLogs(processId: ID!): String! } type Mutation { processMonitoringAbort(processId: ID!, reason: String): String!, processMonitoringKill(processId: ID!, reason: String): String! }`,
   resolvers: {
     Query: {
       loggerHealth: () => Logger.health().status,
       processMonitorSnapshot: async () => JSON.stringify(await Logger.processMonitorSnapshot()),
       processMonitoringList: (_: unknown, args: { kind?: string; status?: string; packageName?: string }) => JSON.stringify(processMonitoring.list(args)),
-      processMonitoringLive: (_: unknown, args: { kind?: string }) => JSON.stringify(processMonitoring.live() instanceof Array ? processMonitoring.queueStatus({ kind: args.kind }) : processMonitoring.queueStatus({ kind: args.kind })),
-      processMonitoringQueueStatus: (_: unknown, args: { kind?: string; workflowId?: string; projectId?: string; agentId?: string; swarmId?: string; nodeId?: string }) => JSON.stringify(processMonitoring.queueStatus(args)),
-      processMonitoringSources: () => JSON.stringify(processMonitoring.runtimeSources()),
       processMonitoringLogs: (_: unknown, args: { processId: string }) => JSON.stringify(processMonitoring.logs.live(args.processId)),
     },
     Mutation: {
@@ -527,8 +385,6 @@ export const createPackage = (): PackageModule => ({
     { method: 'GET', path: '/process-monitoring/list', handler: () => processMonitoring.list() },
     { method: 'GET', path: '/process-monitor/live', handler: () => processMonitoring.live() },
     { method: 'GET', path: '/process-monitoring/live', handler: () => processMonitoring.live() },
-    { method: 'GET', path: '/process-monitoring/queue-status', handler: (request) => processMonitoring.queueStatus(requestBody(request) as { kind?: string; workflowId?: string; projectId?: string; agentId?: string; swarmId?: string; nodeId?: string }) },
-    { method: 'GET', path: '/process-monitoring/sources', handler: () => processMonitoring.runtimeSources() },
     { method: 'GET', path: '/process-monitor/logs/live', handler: (request) => processMonitoring.logs.live(String(requestBody(request).processId ?? '')) },
     { method: 'GET', path: '/process-monitoring/logs/live', handler: (request) => processMonitoring.logs.live(String(requestBody(request).processId ?? '')) },
     { method: 'POST', path: '/process-monitor/abort', handler: (request) => processMonitoring.abort(String(requestBody(request).processId ?? ''), String(requestBody(request).reason ?? 'aborted by user'), (request as { context?: RequestContext }).context ?? {}) },

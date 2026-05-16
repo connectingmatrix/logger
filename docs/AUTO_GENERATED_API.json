@@ -23,7 +23,7 @@
     "./observability"
   ],
   "folderCounts": {
-    "src/ui": 26,
+    "src/client": 26,
     "src/backend": 21,
     "src/entity": 3,
     "migrations": 2,

@@ -4,7 +4,7 @@ Decorator/import logger with file output, socket broadcasting, package health re
 
 ## Ownership
 
-This package owns its `src/ui`, `src/backend`, `src/entity`, GraphQL bundle, migrations, health/status, launcher, and package contracts. It can be included in backend or UI without assuming a monorepo.
+This package owns its `src/client`, `src/backend`, `src/entity`, GraphQL bundle, migrations, health/status, launcher, and package contracts. It can be included in backend or UI without assuming a monorepo.
 
 ## Public contracts
 
@@ -72,7 +72,7 @@ GraphQL namespace and routes are returned by `createPackage()`. Routes include h
 
 ## Folder counts
 
-- `src/ui`: 26 files
+- `src/client`: 26 files
 - `src/backend`: 21 files
 - `src/entity`: 3 files
 - `migrations`: 2 files
